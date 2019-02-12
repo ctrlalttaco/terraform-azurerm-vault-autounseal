@@ -1,0 +1,6 @@
+.vagrant/
+.terraform/
+*.log
+*.tfvars
+*.tfstate
+*.tfstate.backup

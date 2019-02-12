@@ -1,0 +1,25 @@
+#------------
+# Required
+#------------
+
+# Provide your tenant ID (Required)
+tenant_id = ""
+
+# Public SSH key (Required)
+public_key = ""
+
+# Azure Object ID (Required)
+object_id = ""
+
+# Azure account subscription ID (Required)
+subscription_id = ""
+
+#------------
+# Optional
+#------------
+
+# To overwrite the default (Optional)
+# location = "westus"
+
+# To overwrite the default (Optional)
+# environment = "test"
