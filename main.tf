@@ -18,8 +18,24 @@ resource "azuread_application" "vault" {
   homepage = "https://vaultproject.io"
 }
 
+# Need a delay to allow application creation to finish before proceeding
+# https://github.com/terraform-providers/terraform-provider-azuread/issues/4
+resource "null_resource" "delay" {
+  depends_on = ["azuread_application.vault"]
+  provisioner "local-exec" {
+    command = <<EOF
+until az ad app show --id ${azuread_application.vault.application_id}
+do
+  echo "Waiting for service principal..."
+  sleep 3
+done
+EOF
+  }
+}
+
 resource "azuread_service_principal" "vault" {
   application_id = "${azuread_application.vault.application_id}"
+  depends_on = ["null_resource.delay"]
 }
 
 resource "azuread_service_principal_password" "vault" {
@@ -36,8 +52,8 @@ resource "azurerm_key_vault" "vault" {
   name                        = "${var.environment}-vault-${random_id.keyvault.hex}"
   location                    = "${azurerm_resource_group.vault.location}"
   resource_group_name         = "${azurerm_resource_group.vault.name}"
-  enabled_for_deployment      = true
-  enabled_for_disk_encryption = true
+  enabled_for_deployment      = false
+  enabled_for_disk_encryption = false
   tenant_id                   = "${var.tenant_id}"
 
   sku {
@@ -52,7 +68,6 @@ resource "azurerm_key_vault" "vault" {
 # The object ID here is for the SPN that goes in the Vault config
 resource "azurerm_key_vault_access_policy" "vault" {
   key_vault_id = "${azurerm_key_vault.vault.id}"
-
   tenant_id = "${var.tenant_id}"
   object_id = "${azuread_service_principal.vault.id}"
 
@@ -64,20 +79,21 @@ resource "azurerm_key_vault_access_policy" "vault" {
 }
 
 # This is only for the provisioner's object ID so it can actually create the key
-resource "azurerm_key_vault_access_policy" "vault2" {
+resource "azurerm_key_vault_access_policy" "provisioner" {
   key_vault_id = "${azurerm_key_vault.vault.id}"
-
   tenant_id = "${var.tenant_id}"
   object_id = "${var.object_id}"
 
   key_permissions = [
     "get",
     "list",
-    "create",
-    "delete",
     "update",
-    "wrapKey",
-    "unwrapKey",
+    "create",
+    "import",
+    "delete",
+    "recover",
+    "backup",
+    "restore",
   ]
 }
 
@@ -86,6 +102,7 @@ resource "azurerm_key_vault_key" "generated" {
   key_vault_id = "${azurerm_key_vault.vault.id}"
   key_type     = "RSA"
   key_size     = 4096
+  depends_on   = ["azurerm_key_vault_access_policy.provisioner"]
 
   key_opts = [
     "decrypt",
@@ -288,6 +305,7 @@ resource "azurerm_virtual_machine" "tf_vm" {
 data "azurerm_public_ip" "tf_publicip" {
   name                = "${azurerm_public_ip.tf_publicip.name}"
   resource_group_name = "${azurerm_virtual_machine.tf_vm.resource_group_name}"
+  depends_on          = ["azurerm_virtual_machine.tf_vm"]
 }
 
 output "ip" {
